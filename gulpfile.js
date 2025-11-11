@@ -87,9 +87,17 @@ const webpackConfig = {
     globalObject: 'this',
     filename: FILE
   },
-  node: false, // to make sure Webpack doesn't generate 'new Function("return this")' in the bundle output, see https://github.com/josdejong/mathjs/issues/3001
+  node: false,// to make sure Webpack doesn't generate 'new Function("return this")' in the bundle output, see https://github.com/josdejong/mathjs/issues/3001
+  externals: {
+    ws: 'commonjs ws',
+    'child_process': 'commonjs child_process'
+  },
   plugins: [
-    bannerPlugin
+    bannerPlugin,
+    new webpack.IgnorePlugin({
+      resourceRegExp: /src\/type\/matrix\/Optimizer.js/,
+      contextRegExp: /src\/mathjs/,
+    })
     // new webpack.optimize.ModuleConcatenationPlugin()
     // TODO: ModuleConcatenationPlugin seems not to work. https://medium.com/webpack/webpack-3-official-release-15fd2dd8f07b
   ],

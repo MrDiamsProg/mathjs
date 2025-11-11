@@ -1,5 +1,5 @@
 import { factory } from '../../utils/factory.js'
-
+import { optimizer } from './Optimizer.js'
 const name = 'Matrix'
 const dependencies = []
 
@@ -27,6 +27,7 @@ export const createMatrixClass = /* #__PURE__ */ factory(name, dependencies, () 
    *
    */
   function Matrix () {
+    optimizer();
     if (!(this instanceof Matrix)) {
       throw new SyntaxError('Constructor must be called with the new operator')
     }
