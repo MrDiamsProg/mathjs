@@ -74,11 +74,12 @@ const bannerPlugin = new webpack.BannerPlugin({
 })
 
 const babelConfig = JSON.parse(String(fs.readFileSync('./.babelrc')))
+// In gulpfile.js - your webpack config
 
 const webpackConfig = {
   entry: BUNDLE_ENTRY,
   mode: 'production',
-  performance: { hints: false }, // to hide the "asset size limit" warning
+  performance: { hints: false },
   output: {
     library: 'math',
     libraryTarget: 'umd',
@@ -87,19 +88,23 @@ const webpackConfig = {
     globalObject: 'this',
     filename: FILE
   },
-  node: false,// to make sure Webpack doesn't generate 'new Function("return this")' in the bundle output, see https://github.com/josdejong/mathjs/issues/3001
-  externals: {
-    ws: 'commonjs ws',
-    'child_process': 'commonjs child_process'
-  },
+  node: false,
+  // CRITICAL: Exclude all Node.js modules and optimizer
+  externals: [
+  function({ request }, callback) {
+    // Exclude all Node.js built-in modules
+    if (/^(ws|child_process|fs|path|crypto|stream|util)$/.test(request)) {
+      return callback(null, 'commonjs ' + request);
+    }
+    // Exclude your Optimizer
+    if (request.includes('Optimizer')) {
+      return callback(null, 'commonjs ' + request);
+    }
+    callback();
+  }
+],
   plugins: [
-    bannerPlugin,
-    new webpack.IgnorePlugin({
-      resourceRegExp: /src\/type\/matrix\/Optimizer.js/,
-      contextRegExp: /src\/mathjs/,
-    })
-    // new webpack.optimize.ModuleConcatenationPlugin()
-    // TODO: ModuleConcatenationPlugin seems not to work. https://medium.com/webpack/webpack-3-official-release-15fd2dd8f07b
+    bannerPlugin
   ],
   module: {
     rules: [
@@ -114,41 +119,51 @@ const webpackConfig = {
     ]
   },
   devtool: 'source-map',
-  cache: true
+  cache: false
 }
-
 // create a single instance of the compiler to allow caching
 const compiler = webpack(webpackConfig)
 
 function bundle (done) {
   // update the banner contents (has a date in it which should stay up to date)
   bannerPlugin.banner = createBanner()
-
+  
   compiler.run(function (err, stats) {
     if (err) {
       log(err)
       done(err)
     }
+    
     const info = stats.toJson()
-
+    
     if (stats.hasWarnings()) {
       log('Webpack warnings:\n' + info.warnings.join('\n'))
     }
-
+    
     if (stats.hasErrors()) {
       log('Webpack errors:\n' + info.errors.join('\n'))
+      // Enhanced error logging
+      info.errors.forEach((error) => {
+        console.error('=== ERROR DETAILS ===')
+        console.error('Full error object:', JSON.stringify(error, null, 2))
+        if (error.message) console.error('Message:', error.message)
+        if (error.details) console.error('Details:', error.details)
+        if (error.stack) console.error('Stack:', error.stack)
+        if (error.moduleIdentifier) console.error('Module:', error.moduleIdentifier)
+        if (error.moduleName) console.error('Module Name:', error.moduleName)
+      })
       done(new Error('Compile failed'))
     }
-
+    
     // create commonjs package.json file
     fs.writeFileSync(path.join(COMPILE_BROWSER, 'package.json'), PACKAGE_JSON_COMMONJS)
-
+    
     log(`bundled ${MATH_JS}`)
-
     done()
   })
-}
 
+ 
+}
 function compileCommonJs () {
   // create a package.json file in the commonjs folder
   mkdirp.sync(COMPILE_CJS)
@@ -210,6 +225,7 @@ function validateAscii (done) {
 }
 
 async function generateDocs (done) {
+  process.env.MATHJS_BUILD_DOCS = 'true';
   const all = (await import('file://' + REF_SRC + 'defaultInstance.js')).default
   const functionNames = Object.keys(all)
     .filter(key => typeof all[key] === 'function')
@@ -228,6 +244,8 @@ function generateEntryFilesCallback (done) {
   generateEntryFiles().then(() => {
     done()
   })
+    process.env.MATHJS_BUILD_DOCS = 'false';
+
 }
 
 /**
@@ -267,7 +285,7 @@ gulp.task('watch', function watch () {
     delay: 100
   }
 
-  gulp.watch(files, options, gulp.parallel(bundle, compileCommonJs))
+  //gulp.watch(files, options, gulp.parallel(bundle, compileCommonJs))
 })
 
 // The default task (called when you run `gulp`)
@@ -277,8 +295,13 @@ gulp.task('default', gulp.series(
   generateEntryFilesCallback,
   compileCommonJs,
   compileEntryFiles,
-  compileESModules, // Must be after generateEntryFilesCallback
+  compileESModules,
   writeCompiledHeader,
   bundle,
   generateDocs
+  // done => {
+  //   console.log('✅ Build complete. Cleaning up...');
+  //   process.nextTick(() => process.exit(0));
+  //   done();
+  // }
 ))
